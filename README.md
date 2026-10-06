@@ -50,7 +50,17 @@ repositories, arbitrary commit sets and authors.
 
 ## Quick start
 
-Requires **Python 3.10+** and **Node 18+**.
+Requires **Python 3.10+**, **Node 18+** and **git** on the PATH.
+
+```bash
+./start.sh
+```
+
+That one command creates the virtualenv, installs the backend dependencies, installs and builds
+the dashboard, then serves API + UI together on <http://127.0.0.1:8000>. It is idempotent (safe to
+re-run) and honours `HOST` / `PORT` environment variables.
+
+### Manual steps (what `start.sh` does)
 
 ```bash
 # 1. backend dependencies
@@ -63,8 +73,6 @@ cd frontend && npm install && npm run build && cd ..
 # 3. run (serves API + dashboard on one port)
 cd backend && ../.venv/bin/uvicorn app.api:app --port 8000
 ```
-
-Open <http://127.0.0.1:8000>.
 
 For frontend development, run `npm run dev` inside `frontend/` (it proxies `/api` to port 8000)
 while the backend runs with `--reload`.
