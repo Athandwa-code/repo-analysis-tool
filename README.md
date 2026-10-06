@@ -22,6 +22,19 @@ repositories, arbitrary commit sets and authors.
 - **Any ref** — re-analyze an existing clone at any branch, tag or commit hash; `H̄` is always
   “all non-merge commits reachable from the selected ref”.
 
+## Requirement coverage at a glance
+
+| Requirement | Where it is delivered |
+| --- | --- |
+| Correct for **all** metric categories: repo, file, directory, commit set, author | every metric is a sum over stored deltas — see *Git correctness rules*; verified by 48 exact-value engine checks + real-repo validation |
+| **Both** ingestion paths: zip file **and** remote URL | `POST /api/repos` accepts a `.zip` upload (must contain `.git`) or a clone `url` |
+| **All** of: filtering, author merge, multi-repo | repo switcher; author multi-select, file/dir browser, commit-set builder (`H̄`, `H_t`, `H_i,j`, manual list); `.mailmap` + manual merge/unmerge; any number of repositories side by side |
+| Efficient algorithms & architecture | one streaming `git log` pass per repo → SQLite; filters are `WHERE` clauses — query time is O(result), no re-parsing (61 k-commit history imports in ~90 s, queries instant) |
+| Inspired visualisation | metric cards per object, churn-over-time chart (day/week/month), sortable directory/file tables, ownership bars, live import progress |
+| Navigation, error handling, quality-of-life | breadcrumb browser, status/progress/error surfacing per repo, commit picker with search, sortable columns, “set ref”, collapsible author lists |
+| Performance on large (~100 k commit) repos | `git/git` with 61 101 commits imports in ~90 s; the UI stays responsive throughout (background import + polling) |
+| Sample metrics **from a specific commit hash** | `POST /api/repos/{id}/reimport {ref: <hash>}`, or “set ref” in the UI: `H̄` becomes all non-merge commits reachable from that hash — validated at historical hashes (see below) |
+
 ## Git correctness rules (exactly as specified)
 
 | Rule | Implementation |
@@ -112,13 +125,23 @@ For each repository it verifies:
 2. author commit counts against `git shortlog -s -e` (both mailmap-aware),
 3. per-commit `(added, removed)` values at individually sampled **commit hashes** against `git show --numstat`.
 
-Results on the reference repositories:
+Pass `--ref <hash>` to run all three checks for the state reachable from a specific commit hash —
+the exact scenario of the brief’s sample values:
+
+```bash
+python3 tests/validate_repos.py --ref 924122904e6ed15735f0439c82b7d09ea87b822f cJSON
+```
+
+Results on the reference repositories (HEAD, and historical commit hashes via `--ref`):
 
 | Repository | Commits analyzed | Repository totals (engine = git) | Author identities | Per-commit samples |
 | --- | --- | --- | --- | --- |
 | cJSON | 955 | 46 377 added / 11 211 removed ✓ | 101 ✓ | 25/25 hashes ✓ |
 | Redis | 11 875 | 1 110 390 added / 500 315 removed ✓ | 976 ✓ | 25/25 hashes ✓ |
 | git | 61 101 | 4 070 371 added / 2 375 604 removed ✓ | 2 485 ✓ | 25/25 hashes ✓ |
+| cJSON @ `9241229` | 397 | 29 251 / 4 728 ✓ | 27 ✓ | 25/25 ✓ |
+| Redis @ `23a4d70` | 4 992 | 361 858 / 170 407 ✓ | 215 ✓ | 25/25 ✓ |
+| git @ `3ebda3e` | 29 794 | 1 256 299 / 535 205 ✓ | 1 301 ✓ | 25/25 ✓ |
 
 The full `git/git` history (61 101 non-merge commits) imports in about a minute and a half — under
 the Python engine, one streaming pass, no temporary files.

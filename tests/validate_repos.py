@@ -11,7 +11,10 @@ For each repository directory given on the command line this script:
 4. spot-checks per-commit metrics at specific commit hashes against
    `git show --numstat` — this mirrors the brief's sample-value checks.
 
-Usage: python3 tests/validate_repos.py <repo-dir> [<repo-dir> ...]
+Usage: python3 tests/validate_repos.py [--ref <commit-ish>] <repo-dir> ...
+
+With --ref the whole comparison is done for the state reachable from that
+commit hash — the exact scenario of the brief's sample-value checks.
 """
 import random
 import subprocess
@@ -55,17 +58,17 @@ def awk_numstat(data: bytes, z=False):
     return added, removed
 
 
-def git_totals(repo):
+def git_totals(repo, ref):
     """Independent repository-level totals via git + a plain-text sum."""
     out = git(
-        repo, "log", "--no-merges", "--root", "-M50%", "--numstat", "--format="
+        repo, "log", "--no-merges", "--root", "-M50%", "--numstat", "--format=", ref
     )
     return awk_numstat(out)
 
 
-def shortlog_by_email(repo):
+def shortlog_by_email(repo, ref):
     want = {}
-    for line in git(repo, "shortlog", "--no-merges", "-s", "-e", "HEAD").decode(
+    for line in git(repo, "shortlog", "--no-merges", "-s", "-e", ref).decode(
         "utf-8", "replace"
     ).splitlines():
         line = line.strip()
@@ -77,12 +80,12 @@ def shortlog_by_email(repo):
     return want
 
 
-def commit_hashes(repo):
-    return git(repo, "rev-list", "--no-merges", "HEAD").decode().split()
+def commit_hashes(repo, ref):
+    return git(repo, "rev-list", "--no-merges", ref).decode().split()
 
 
-def per_commit_check(name, repo, conn, repo_id, n_sample=25):
-    hashes = commit_hashes(repo)
+def per_commit_check(name, repo, conn, repo_id, ref, n_sample=25):
+    hashes = commit_hashes(repo, ref)
     rng = random.Random(42)
     sample = (
         hashes if len(hashes) <= n_sample else rng.sample(hashes, n_sample)
@@ -104,10 +107,10 @@ def per_commit_check(name, repo, conn, repo_id, n_sample=25):
     check(f"{name}: per-commit values match git show ({len(sample)} sampled hashes)", bad == 0)
 
 
-def validate(repo_dir):
+def validate(repo_dir, ref="HEAD"):
     repo = str(Path(repo_dir).resolve())
     name = Path(repo).name
-    print(f"\n=== {name} ===")
+    print(f"\n=== {name} @ {ref[:12]} ===")
     dbp = Path(tempfile.mkdtemp()) / "validate.sqlite3"
     conn = db.connect(dbp)
     conn.execute(
@@ -117,18 +120,18 @@ def validate(repo_dir):
     repo_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     t0 = time.time()
-    stats = analyzer.import_repo(conn, repo_id, repo)
+    stats = analyzer.import_repo(conn, repo_id, repo, ref=ref)
     dt = time.time() - t0
 
     got = metrics.object_metrics(conn, repo_id, "", True)
-    want_a, want_r = git_totals(repo)
+    want_a, want_r = git_totals(repo, ref)
     check(
         f"{name}: repository totals match git awk ({want_a} added / {want_r} removed)",
         (got["added"], got["removed"]) == (want_a, want_r),
         f"engine {got['added']}/{got['removed']} in {dt:.1f}s, {stats['commits']} commits",
     )
 
-    want = shortlog_by_email(repo)
+    want = shortlog_by_email(repo, ref)
     ours = {
         r["email"]: r["n"]
         for r in conn.execute(
@@ -145,16 +148,24 @@ def validate(repo_dir):
         "" if not mism else f"{len(mism)} differing: {list(mism.items())[:3]}",
     )
 
-    per_commit_check(name, repo, conn, repo_id)
+    per_commit_check(name, repo, conn, repo_id, ref)
     conn.close()
 
 
 def main():
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+    ref = "HEAD"
+    if args and args[0] == "--ref":
+        if len(args) < 3:
+            print("usage: validate_repos.py [--ref <commit-ish>] <repo-dir> ...")
+            raise SystemExit(2)
+        ref = args[1]
+        args = args[2:]
+    if not args:
         print(__doc__)
         raise SystemExit(2)
-    for repo in sys.argv[1:]:
-        validate(repo)
+    for repo in args:
+        validate(repo, ref)
     print()
     if FAIL:
         print(f"{len(FAIL)} FAILURES")
