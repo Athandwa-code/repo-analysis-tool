@@ -72,6 +72,7 @@ export default function FilterBar({
   setSelectedAuthors,
 }) {
   const mode = commitSet.mode || "all";
+  const [showAllAuthors, setShowAllAuthors] = useState(false);
 
   const groups = useMemo(() => {
     const byEff = new Map();
@@ -80,11 +81,17 @@ export default function FilterBar({
       if (!byEff.has(key)) byEff.set(key, []);
       byEff.get(key).push(a);
     }
-    return [...byEff.entries()].map(([eff, members]) => {
-      const root = members.find((m) => m.id === eff) || members[0];
-      return { eff, label: root.name, email: root.email, members };
-    });
+    return [...byEff.entries()]
+      .map(([eff, members]) => {
+        const root = members.find((m) => m.id === eff) || members[0];
+        const commits = members.reduce((s, m) => s + (m.commit_count || 0), 0);
+        return { eff, label: root.name, members, commits };
+      })
+      .sort((a, b) => b.commits - a.commits);
   }, [authors]);
+
+  const visibleGroups = showAllAuthors ? groups : groups.slice(0, 24);
+  const hidden = groups.length - visibleGroups.length;
 
   const toggleAuthor = (eff) => {
     const set = new Set(selectedAuthors);
@@ -166,7 +173,7 @@ export default function FilterBar({
       <h2 style={{ marginTop: 12 }}>Authors</h2>
       {groups.length === 0 && <div className="muted small">No authors.</div>}
       <div className="chips">
-        {groups.map((g) => (
+        {visibleGroups.map((g) => (
           <span
             key={g.eff}
             className={"chip" + (selectedAuthors.includes(g.eff) ? " on" : "")}
@@ -177,6 +184,16 @@ export default function FilterBar({
             {g.members.length > 1 ? ` (+${g.members.length - 1})` : ""}
           </span>
         ))}
+        {hidden > 0 && (
+          <span className="chip" onClick={() => setShowAllAuthors(true)}>
+            +{hidden} more…
+          </span>
+        )}
+        {showAllAuthors && groups.length > 24 && (
+          <span className="chip" onClick={() => setShowAllAuthors(false)}>
+            show fewer
+          </span>
+        )}
       </div>
       <div className="actions">
         <button
