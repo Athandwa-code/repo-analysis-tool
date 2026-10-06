@@ -203,9 +203,10 @@ def list_children(conn, repo_id, path, commit_set=None, author_ids=None):
         if not rest:
             continue
         if "/" in rest:
-            child, cdir = prefix + rest.split("/", 1)[0], 1
-        else:
-            child, cdir = r["p"], r["d"]
+            # deeper object: its contribution is already included in the
+            # ancestor directory's own rollup row, so skip it here
+            continue
+        child, cdir = r["p"], r["d"]
         cur = children.setdefault((child, cdir), [0, 0, 0])
         cur[0] += r["a"]
         cur[1] += r["r"]

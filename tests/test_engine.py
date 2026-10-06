@@ -96,6 +96,22 @@ def main():
     ).fetchone()[0]
     check("pure rename has no change rows", c4rows, 0)
 
+    # ---- directory listings (regression: rollup rows must not be double counted) ----
+    root_kids = {
+        c["path"]: (c["added"], c["removed"], c["modifications"])
+        for c in metrics.list_children(conn, repo_id, "")
+    }
+    check("children of root: src = rollup once", root_kids.get("src"), (7, 6, 5))
+    check("children of root: README.md", root_kids.get("README.md"), (2, 0, 1))
+    check("children of root count", len(root_kids), 5)
+    src_kids = {
+        c["path"]: (c["added"], c["removed"], c["modifications"])
+        for c in metrics.list_children(conn, repo_id, "src")
+    }
+    check("children of src: a.txt", src_kids.get("src/a.txt"), (5, 1, 2))
+    check("children of src: deep (dir)", src_kids.get("src/deep"), (1, 0, 1))
+    check("children of src count", len(src_kids), 4)
+
     # ---- authors (mailmap applied at import) ----
     am = {(a["name"], a["email"]): a for a in metrics.author_metrics(conn, repo_id, "", 1)}
     expected_authors = {

@@ -56,6 +56,10 @@ class UnmergeSpec(BaseModel):
     author_ids: list[int]
 
 
+class ReimportSpec(BaseModel):
+    ref: str = "HEAD"
+
+
 class TimeseriesSpec(ViewSpec):
     bucket: str = "week"  # day | week | month
 
@@ -242,6 +246,33 @@ def delete_repo(repo_id: int):
         if path and path.exists() and REPOS_DIR in path.parents:
             shutil.rmtree(path, ignore_errors=True)
         return {"deleted": repo_id}
+    finally:
+        conn.close()
+
+
+@app.post("/api/repos/{repo_id}/reimport")
+def reimport_repo(repo_id: int, spec: ReimportSpec):
+    """Re-run the analysis at another ref (branch, tag or commit hash).
+
+    The clone keeps full history, so metrics can be recomputed for any ref;
+    commit set H-bar then means "commits reachable from that ref".
+    """
+    conn = db.connect()
+    try:
+        row = _repo_row(conn, repo_id)
+        path = row["path"]
+        if not path or not Path(path).exists():
+            raise HTTPException(400, "repository files missing; re-add the repository")
+        ref = (spec.ref or "HEAD").strip()
+        conn.execute(
+            "UPDATE repositories SET ref=?, status='importing', progress=0, error=NULL WHERE id=?",
+            (ref, repo_id),
+        )
+        conn.commit()
+        threading.Thread(
+            target=_run_import, args=(repo_id, Path(path), ref), daemon=True
+        ).start()
+        return dict(_repo_row(conn, repo_id))
     finally:
         conn.close()
 

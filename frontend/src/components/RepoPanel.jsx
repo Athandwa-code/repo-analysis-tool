@@ -46,6 +46,22 @@ export default function RepoPanel({ repos, repoId, onSelect, onRefresh, onError 
     await onRefresh();
   };
 
+  const reanalyze = async (e, r) => {
+    e.stopPropagation();
+    const ref = window.prompt(
+      "Analyze this repository at ref (branch, tag or commit hash):",
+      r.ref || "HEAD"
+    );
+    if (!ref) return;
+    try {
+      await api(`/api/repos/${r.id}/reimport`, { method: "POST", body: { ref } });
+    } catch (err) {
+      onError(String(err.message || err));
+    }
+    await onRefresh();
+    onSelect(r.id);
+  };
+
   return (
     <div>
       <div className="card">
@@ -93,11 +109,16 @@ export default function RepoPanel({ repos, repoId, onSelect, onRefresh, onError 
             </div>
             <div className="row small muted" style={{ marginTop: 2 }}>
               <span>
-                {r.source_type === "zip" ? "zip" : "clone"} · {r.commit_total || 0} commits
+                {r.source_type === "zip" ? "zip" : "clone"} · {r.commit_total || 0} commits · @{r.ref}
               </span>
-              <button className="danger small" onClick={(e) => remove(e, r.id, r.name)}>
-                delete
-              </button>
+              <span>
+                <button className="small" onClick={(e) => reanalyze(e, r)}>
+                  set ref
+                </button>{" "}
+                <button className="danger small" onClick={(e) => remove(e, r.id, r.name)}>
+                  delete
+                </button>
+              </span>
             </div>
             {["pending", "cloning", "importing"].includes(r.status) && (
               <div className="progress">
