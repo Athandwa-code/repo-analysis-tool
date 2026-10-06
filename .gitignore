@@ -17,5 +17,9 @@ data/
 uploads/
 *.sqlite3
 
+# Scratch / local experiments
+_scratch/
+
 # OS noise
 .DS_Store
+*.pyc
