@@ -50,17 +50,68 @@ repositories, arbitrary commit sets and authors.
 
 ## Quick start
 
-Requires **Python 3.10+**, **Node 18+** and **git** on the PATH.
+### 0. Prerequisites
+
+Only three tools are required — check them first:
+
+| Tool | Minimum version | Verify with |
+| --- | --- | --- |
+| Python | 3.10 | `python3 --version` |
+| Node.js + npm | 18 | `node --version && npm --version` |
+| git | 2.30 | `git --version` |
+
+On Ubuntu/Debian these are `sudo apt install python3 python3-venv nodejs npm git`.
+
+### 1. Start the app (one command)
+
+From the repository root:
 
 ```bash
 ./start.sh
 ```
 
-That one command creates the virtualenv, installs the backend dependencies, installs and builds
-the dashboard, then serves API + UI together on <http://127.0.0.1:8000>. It is idempotent (safe to
-re-run) and honours `HOST` / `PORT` environment variables.
+`start.sh` performs every setup step in order:
 
-### Manual steps (what `start.sh` does)
+1. creates a Python virtualenv in `.venv/` (first run only),
+2. installs the backend dependencies from `backend/requirements.txt`,
+3. installs the dashboard's npm dependencies and builds it (`frontend/`),
+4. starts the server on <http://127.0.0.1:8000>.
+
+It is idempotent — re-running is safe and fast (the venv and `node_modules` are reused). It
+honours environment variables, e.g. `PORT=9000 ./start.sh`. Stop the server with `Ctrl+C`.
+
+### 2. Use the app
+
+1. Open <http://127.0.0.1:8000> in any browser.
+2. In the left panel, add a repository — either
+   - paste a **clone URL** (e.g. `https://github.com/DaveGamble/cJSON.git`) into the *URL* tab, or
+   - upload a **`.zip`** containing a `.git` directory via the *zip* tab.
+   Any git repository works — these are just examples.
+3. The import runs in the background with a live progress bar: small repos (~1,000 commits) finish
+   in seconds; the full `git/git` history (~61,000 commits) takes ~90 seconds.
+4. Select the repository, then use the dashboard: browse directories and files via breadcrumbs,
+   build commit sets (*all* / *since* / *date range* / *hand-picked hashes*), filter by author, and
+   merge duplicate author identities in the *Authors* tab. Every filter updates all metrics
+   instantly.
+5. To analyse a **specific commit hash** (e.g. supplied by a marker): click *set ref* on the
+   repository card, paste the hash, and it re-imports the state reachable from that commit.
+
+### 3. Run the tests (optional)
+
+```bash
+python3 tests/make_fixture.py && python3 tests/test_engine.py   # 48/48 exact-value checks
+```
+
+To cross-validate the engine against independent `git` pipelines on a real repository:
+
+```bash
+git clone https://github.com/DaveGamble/cJSON.git /tmp/cJSON
+python3 tests/validate_repos.py /tmp/cJSON          # add --ref <hash> for a specific commit
+```
+
+See *Tests & validation* below for the full results on cJSON, Redis and git.
+
+### Manual setup (equivalent to `start.sh`)
 
 ```bash
 # 1. backend dependencies
@@ -73,6 +124,16 @@ cd frontend && npm install && npm run build && cd ..
 # 3. run (serves API + dashboard on one port)
 cd backend && ../.venv/bin/uvicorn app.api:app --port 8000
 ```
+
+### Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `ERROR: 'node' is required ...` (or python3/git) | install the missing tool from step 0 |
+| `[Errno 98] address already in use` | another process uses port 8000 — run `PORT=9000 ./start.sh` |
+| Root URL shows a JSON status object instead of the dashboard | the frontend was not built — run `cd frontend && npm install && npm run build`, then restart |
+| Zip upload rejected | the archive must contain a `.git` directory at some level |
+| Import failed with a git error | the URL must be clonable from this machine (`git clone <url>` must work) |
 
 For frontend development, run `npm run dev` inside `frontend/` (it proxies `/api` to port 8000)
 while the backend runs with `--reload`.
