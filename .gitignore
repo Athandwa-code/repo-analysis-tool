@@ -1,0 +1,21 @@
+# IDE / workspace
+.aicoding-chat-workspace
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+
+# Application data (analyzed repos, uploads, caches)
+data/
+uploads/
+*.sqlite3
+
+# OS noise
+.DS_Store
